@@ -1,7 +1,6 @@
 # ts-caldav
 
-[![npm version](https://img.shields.io/npm/v/ts-caldav.svg)](https://www.npmjs.com/package/ts-caldav)
-[![Run Tests](https://github.com/KlautNet/ts-caldav/actions/workflows/test.yml/badge.svg)](https://github.com/KlautNet/ts-caldav/actions/workflows/test.yml)
+[![Run Tests](https://github.com/ChristianSch/ts-caldav/actions/workflows/test.yml/badge.svg)](https://github.com/ChristianSch/ts-caldav/actions/workflows/test.yml)
 
 > A lightweight, promise-based TypeScript CalDAV client for syncing calendar data in browser, Node.js, React Native, or **edge runtime environments** (Cloudflare Workers, Supabase Edge Functions).
 
