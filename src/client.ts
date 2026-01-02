@@ -269,7 +269,7 @@ export class CalDAVClient {
         "User principal not found: credentials rejected or server misconfigured.",
       );
     }
-    const principalUrl = this.absolutize(this.resolveUrl(principalHref));
+    const principalUrl = this.absolutize(principalHref);
     this.userPrincipal = principalUrl;
 
     const chsXml = `
@@ -281,7 +281,7 @@ export class CalDAVClient {
     const homeHref = this.getHrefFromProp(chs, "calendar-home-set");
     if (!homeHref)
       throw new Error("calendar-home-set not found for principal.");
-    const homeUrl = this.absolutize(this.resolveUrl(homeHref));
+    const homeUrl = this.absolutize(homeHref);
     this.calendarHome = homeUrl;
 
     try {
@@ -1088,21 +1088,17 @@ export class CalDAVClient {
   }
 
   private async followRedirectOnce(url: string): Promise<string> {
-    try {
-      const res = await this.request({
-        method: "GET",
-        url,
-        redirect: "manual",
-        validateStatus: (s) => (s >= 200 && s < 300) || (s >= 300 && s < 400),
-      });
-      if (res.status >= 300 && res.status < 400) {
-        const loc = res.headers.get("location");
-        if (!loc) throw new Error(`Redirect without Location from ${url}`);
-        return this.absolutize(loc);
-      }
-      return url;
-    } catch {
-      return url;
+    const res = await this.request({
+      method: "GET",
+      url,
+      redirect: "manual",
+      validateStatus: (s) => (s >= 200 && s < 300) || (s >= 300 && s < 400),
+    });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc) throw new Error(`Redirect without Location from ${url}`);
+      return this.absolutize(loc);
     }
+    return url;
   }
 }
