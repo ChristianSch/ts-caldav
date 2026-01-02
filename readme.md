@@ -3,9 +3,19 @@
 [![npm version](https://img.shields.io/npm/v/ts-caldav.svg)](https://www.npmjs.com/package/ts-caldav)
 [![Run Tests](https://github.com/KlautNet/ts-caldav/actions/workflows/test.yml/badge.svg)](https://github.com/KlautNet/ts-caldav/actions/workflows/test.yml)
 
-> A lightweight, promise-based TypeScript CalDAV client for syncing calendar data in browser, Node.js, or React Native environments.
+> A lightweight, promise-based TypeScript CalDAV client for syncing calendar data in browser, Node.js, React Native, or **edge runtime environments** (Cloudflare Workers, Supabase Edge Functions).
 
 **ts-caldav** helps you interact with CalDAV servers — allowing you to fetch calendars, manage events (including recurring events), and synchronize changes with minimal effort. Great for building calendar apps or integrations.
+
+## Edge Runtime Support
+
+This fork uses native `fetch` instead of axios, making it compatible with Cloudflare Workers, Supabase Edge Functions, and other edge runtimes. The `duplex: 'half'` option is used for all requests with a body, allowing proper redirect handling in environments where request bodies cannot be streamed.
+
+**Tested and working as of January 2nd, 2026:**
+- Google Calendar (CalDAV API)
+- Apple iCloud
+- Radicale
+- Any standard CalDAV server
 
 ## Table of Contents
 
@@ -292,11 +302,46 @@ if (result.changed) {
 
 ## Development
 
+This project uses [Radicale](https://radicale.org/) as a local CalDAV server for testing.
+
 ```bash
 git clone https://github.com/yourname/ts-caldav.git
 cd ts-caldav
 npm install
+
+# Start Radicale (requires Docker)
+docker-compose up -d
+
+# Create a test calendar
+curl -u test:test123 -X MKCALENDAR http://localhost:5232/test/calendar/
+
+# Copy environment variables
+cp .env.example .env
+
+# Run tests
+npm test
+
+# Build
 npm run build
+```
+
+### Testing with other providers
+
+To test against Google Calendar or iCloud, add credentials to your `.env`:
+
+```bash
+# Google (OAuth token from https://developers.google.com/oauthplayground)
+ACCESS_TOKEN=ya29.xxx
+
+# iCloud (app-specific password from https://appleid.apple.com)
+ICLOUD_USERNAME=your-apple-id@icloud.com
+ICLOUD_PASSWORD=xxxx-xxxx-xxxx-xxxx
+```
+
+Then run:
+```bash
+npm test -- --testPathPattern="google.test"
+npm test -- --testPathPattern="icloud.test"
 ```
 
 ## Contributing
