@@ -10,11 +10,16 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      radicale:
+        image: tomsquest/docker-radicale:latest
+        ports:
+          - 5232:5232
+
     env:
-      ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-      CALDAV_BASE_URL: ${{ secrets.CALDAV_BASE_URL }}
-      CALDAV_USERNAME: ${{ secrets.CALDAV_USERNAME }}
-      CALDAV_PASSWORD: ${{ secrets.CALDAV_PASSWORD }}
+      CALDAV_BASE_URL: http://localhost:5232
+      CALDAV_USERNAME: test
+      CALDAV_PASSWORD: test123
 
     steps:
       - name: Checkout code
@@ -27,6 +32,14 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Setup Radicale user and calendar
+        run: |
+          # Wait for Radicale to start
+          sleep 3
+          # Create user (Radicale auto-creates on first auth with default config)
+          # Create a calendar
+          curl -u test:test123 -X MKCALENDAR http://localhost:5232/test/calendar/ || true
 
       - name: Run tests
         run: |

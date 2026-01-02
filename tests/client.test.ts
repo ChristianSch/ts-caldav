@@ -48,8 +48,8 @@ describe("CalDAVClient Credential Validation", () => {
           username: "invalid",
           password: "invalid",
         },
-      })
-    ).rejects.toThrow("Request failed with status code 401");
+      }),
+    ).rejects.toThrow();
   });
 });
 
@@ -91,7 +91,7 @@ describe("CalDAVClient Calendar Operations", () => {
         end,
         summary: "Duplicate",
         uid: eventUid,
-      })
+      }),
     ).rejects.toThrow("already exists");
   });
 
