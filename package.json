@@ -24,9 +24,9 @@
   "dependencies": {
     "base-64": "^1.0.0",
     "dotenv": "^16.4.7",
-    "fast-xml-parser": "^4.5.1",
+    "fast-xml-parser": "^5.8.0",
     "ical.js": "^2.1.0",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.16.0",
