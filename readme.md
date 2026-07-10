@@ -95,6 +95,26 @@ const client = await CalDAVClient.create({
 });
 ```
 
+#### Options
+
+| Option               | Type                              | Default             | Description                                                                                                      |
+| -------------------- | --------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`            | `string`                          | —                   | Base URL of the CalDAV server. Required.                                                                          |
+| `auth`               | `{ type: "basic", ... }` \| `{ type: "oauth", accessToken }` | — | Credentials. Required.                                                               |
+| `requestTimeout`     | `number` (ms)                     | `5000`              | Aborts a request after this many milliseconds. Set `0` to disable.                                               |
+| `logRequests`        | `boolean`                         | `false`             | Logs each request method, URL, and response status via `console.debug`.                                          |
+| `prodId`             | `string`                          | ts-caldav default   | `PRODID` written into generated iCalendar data.                                                                  |
+| `headers`            | `Record<string, string>`          | `{}`                | Extra headers merged into every request.                                                                         |
+| `rejectUnauthorized` | `boolean`                         | `true`              | Set `false` to allow self-signed / invalid TLS certificates. See the note below.                                |
+
+> **`rejectUnauthorized: false` and native `fetch`:** ts-caldav uses the runtime's
+> built-in `fetch`, which has no per-request TLS toggle. To disable certificate
+> verification in **Node.js**, install [`undici`](https://www.npmjs.com/package/undici)
+> (`npm i undici`) — ts-caldav will use it automatically — or set the
+> `NODE_TLS_REJECT_UNAUTHORIZED=0` environment variable. If neither is available
+> the option can't take effect and a warning is logged rather than failing
+> silently. Only use this against servers you control.
+
 ### `CalDAVClient.createFromCache(options, cache)`
 
 Restores a client from cached state without re-fetching calendar home or validating credentials.

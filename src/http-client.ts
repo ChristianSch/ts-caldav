@@ -1,14 +1,5 @@
+import { CalDAVError } from "./errors";
 import { AuthOptions } from "./models";
-
-export class HttpError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "HttpError";
-  }
-}
 
 type RequestOptions = {
   method: string;
@@ -26,8 +17,16 @@ export type HttpResponse = {
   url: string;
 };
 
+// Emitted at most once per process so a broken TLS-bypass setup is loud but
+// not spammy.
+let tlsBypassWarningShown = false;
+
 class HttpClient {
   private authHeader: string;
+  // Lazily-built, cached undici dispatcher used to disable TLS verification
+  // when `rejectUnauthorized` is false. `undefined` once resolved means the
+  // current runtime can't provide one.
+  private insecureDispatcher?: Promise<unknown>;
 
   constructor(
     private baseUrl: string,
@@ -41,6 +40,43 @@ class HttpClient {
       auth.type === "basic"
         ? `Basic ${btoa(`${auth.username}:${auth.password}`)}`
         : `Bearer ${auth.accessToken}`;
+  }
+
+  /**
+   * Resolves an undici dispatcher that disables TLS certificate verification,
+   * or `undefined` when verification should stay on or the runtime can't
+   * provide one. Native `fetch` (undici) has no per-request TLS toggle, so we
+   * fall back to an undici `Agent`. On runtimes without undici (browsers,
+   * React Native) this warns once instead of silently ignoring the option.
+   */
+  private getInsecureDispatcher(): Promise<unknown> {
+    if (this.rejectUnauthorized) return Promise.resolve(undefined);
+    if (!this.insecureDispatcher) {
+      this.insecureDispatcher = (async () => {
+        try {
+          // Indirect specifier so bundlers (Metro, webpack) don't try to
+          // resolve undici in builds where it isn't available.
+          const specifier = "undici";
+          const undici = (await import(specifier)) as {
+            Agent: new (opts: unknown) => unknown;
+          };
+          return new undici.Agent({ connect: { rejectUnauthorized: false } });
+        } catch {
+          if (!tlsBypassWarningShown) {
+            tlsBypassWarningShown = true;
+            console.warn(
+              "[ts-caldav] `rejectUnauthorized: false` was set but TLS " +
+                "verification could not be disabled for this runtime. Native " +
+                "fetch only supports this in Node.js with the `undici` package " +
+                "installed, or by setting NODE_TLS_REJECT_UNAUTHORIZED=0. " +
+                "Requests to servers with self-signed certificates may fail.",
+            );
+          }
+          return undefined;
+        }
+      })();
+    }
+    return this.insecureDispatcher;
   }
 
   async request({
@@ -63,6 +99,8 @@ class HttpClient {
       console.debug(`[ts-caldav] ${method} ${requestUrl}`);
     }
 
+    const dispatcher = await this.getInsecureDispatcher();
+
     let response: Response;
     try {
       response = await fetch(requestUrl, {
@@ -76,14 +114,21 @@ class HttpClient {
           ...headers,
         },
         body: data,
-      });
+        // `dispatcher` is an undici-specific extension not present in the
+        // standard RequestInit type; only set when disabling TLS verification.
+        ...(dispatcher ? { dispatcher } : {}),
+      } as RequestInit);
     } catch (error) {
       if (controller?.signal.aborted) {
-        throw new Error(
+        throw new CalDAVError(
           `Request timed out after ${this.requestTimeout}ms: ${method} ${requestUrl}`,
         );
       }
-      throw error;
+      throw new CalDAVError(
+        `Request failed: ${method} ${requestUrl}`,
+        undefined,
+        { cause: error },
+      );
     } finally {
       if (timeout) clearTimeout(timeout);
     }
@@ -101,7 +146,7 @@ class HttpClient {
     const effectiveValidate =
       validateStatus ?? ((s: number) => s >= 200 && s < 300);
     if (!effectiveValidate(response.status)) {
-      throw new HttpError(response.status, `HTTP ${response.status}`);
+      throw new CalDAVError(`HTTP ${response.status}`, response.status);
     }
 
     return {

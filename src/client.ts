@@ -31,7 +31,6 @@ import {
 } from "./protocol/crud";
 
 const ICS_CT = "text/calendar; charset=utf-8";
-//TODO: ADD Support for bypassing TLS BACK
 export class CalDAVClient {
   private httpClient: HttpClient;
   private prodId: string;

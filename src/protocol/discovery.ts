@@ -13,6 +13,7 @@ type DiscoveryDeps = {
 const DISCOVERY_CANDIDATES = [
   "/",
   "/dav",
+  "/dav.php", // Baikal / sabre/dav
   "/caldav",
   "/caldav.php",
   "/remote.php/dav",

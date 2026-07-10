@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { CalDAVError } from "../errors";
-import HttpClient, { HttpError, HttpResponse } from "../http-client";
+import HttpClient, { HttpResponse } from "../http-client";
 import { normalizeSlashEnd } from "../utils/common";
 import { PartialBy } from "./types";
 
@@ -51,7 +51,7 @@ export const createItem = async <
     const newCtag = await getCtag(calendarUrl);
     return { uid, href: `${base}/${uid}.ics`, etag, newCtag };
   } catch (error) {
-    if (error instanceof HttpError && error.status === 412) {
+    if (error instanceof CalDAVError && error.status === 412) {
       throw new CalDAVError(
         `${itemType[0].toUpperCase() + itemType.slice(1)} with the specified uid already exists.`,
         412,
@@ -60,7 +60,7 @@ export const createItem = async <
     }
     throw new CalDAVError(
       `Failed to create ${itemType}.`,
-      error instanceof HttpError ? error.status : undefined,
+      error instanceof CalDAVError ? error.status : undefined,
       { cause: error },
     );
   }
@@ -97,7 +97,7 @@ export const updateItem = async <
     const newCtag = await getCtag(calendarUrl);
     return { uid: item.uid, href: item.href, etag: newEtag, newCtag };
   } catch (error) {
-    if (error instanceof HttpError && error.status === 412) {
+    if (error instanceof CalDAVError && error.status === 412) {
       throw new CalDAVError(
         `${itemType[0].toUpperCase() + itemType.slice(1)} with the specified uid does not match.`,
         412,
@@ -106,7 +106,7 @@ export const updateItem = async <
     }
     throw new CalDAVError(
       `Failed to update ${itemType}.`,
-      error instanceof HttpError ? error.status : undefined,
+      error instanceof CalDAVError ? error.status : undefined,
       { cause: error },
     );
   }
@@ -129,7 +129,7 @@ export const deleteItem = async (
   } catch (error) {
     throw new CalDAVError(
       `Failed to delete ${itemType}.`,
-      error instanceof HttpError ? error.status : undefined,
+      error instanceof CalDAVError ? error.status : undefined,
       { cause: error },
     );
   }

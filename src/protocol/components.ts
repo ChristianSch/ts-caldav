@@ -1,5 +1,5 @@
 import { CalDAVError } from "../errors";
-import HttpClient, { HttpError } from "../http-client";
+import HttpClient from "../http-client";
 import { formatDate } from "../utils/encode";
 import {
   asString,
@@ -70,7 +70,7 @@ export const getComponents = async <T>(
   } catch (error) {
     throw new CalDAVError(
       `Failed to retrieve ${component.toLowerCase()}s from the CalDAV server.`,
-      error instanceof HttpError ? error.status : undefined,
+      error instanceof CalDAVError ? error.status : undefined,
       { cause: error },
     );
   }
@@ -94,11 +94,9 @@ export const getETag = async (
     return String(etagRaw).replace(/^W\//, "");
   } catch (error) {
     if (error instanceof CalDAVError) throw error;
-    throw new CalDAVError(
-      `Failed to retrieve ETag for ${href}.`,
-      error instanceof HttpError ? error.status : undefined,
-      { cause: error },
-    );
+    throw new CalDAVError(`Failed to retrieve ETag for ${href}.`, undefined, {
+      cause: error,
+    });
   }
 };
 
