@@ -16,6 +16,7 @@
 - [API Documentation](#api-documentation)
 - [Timezone Support](#timezone-support)
 - [Recurrence Support](#recurrence-support)
+- [Error Handling](#error-handling)
 - [Auth Notes](#auth-notes)
 - [Example: Sync Local Calendar](#example-use-case-sync-local-calendar)
 - [Limitations](#limitations)
@@ -29,9 +30,11 @@
 - Credential validation with CalDAV servers
 - Automatic CalDAV endpoint discovery
 - Fetch calendar homes and individual calendars (with color support)
-- List, create (including recurring), and delete events
-- Detect event changes using `getctag` and `etag`
-- Efficient sync with diff-based event updates
+- List, create (including recurring), update, and delete events and todos (VTODO)
+- Optional server-side expansion of recurring events into individual occurrences
+- Detect changes using `getctag` and `etag`
+- Efficient sync with diff-based updates
+- Unified error handling via a single `CalDAVError` type
 - Built for TypeScript, with full type safety
 
 ## Installation
@@ -43,6 +46,21 @@ pnpm install ts-caldav
 # or
 yarn add ts-caldav
 ```
+
+> **Requirements:** ts-caldav bundles no HTTP-client dependency — it uses the
+> runtime's built-in web APIs (`fetch`, `AbortController`, `URL`, `btoa`). It
+> therefore runs on any runtime that provides them, including:
+>
+> - **Node.js 18+** (where `fetch` became a global)
+> - **modern browsers**
+> - **React Native** (`fetch`/`AbortController` are built in)
+> - **edge runtimes** — Cloudflare Workers, Deno, Bun, Vercel Edge
+>
+> The `engines.node` field (`>=18`) only constrains Node itself and does not
+> restrict browser, React Native, or edge deployments. The optional `undici`
+> fallback for `rejectUnauthorized: false` is Node-only and loaded lazily, so it
+> never affects other runtimes. (Basic auth relies on `btoa`; on older React
+> Native versions without it, add a small `btoa` polyfill or use OAuth.)
 
 ## Quick Start
 
@@ -74,6 +92,9 @@ const events = await client.getEvents(calendars[0].url);
 | **Yahoo**     | `https://caldav.calendar.yahoo.com` |
 | **GMX**       | `https://caldav.gmx.net` |
 | **Fastmail**  | `https://caldav.fastmail.com` |
+| **Nextcloud** | `https://your-host/remote.php/dav` |
+| **Baikal**    | `https://your-host` (or `https://your-host/dav.php`) |
+| **Radicale**  | `https://your-host` |
 
 > **Note:** Some servers may require enabling CalDAV support or generating app-specific passwords, especially iCloud and Fastmail.
 
@@ -146,6 +167,20 @@ const events = await client.getEvents(calendarUrl, {
   all: false
 });
 ```
+
+Pass `expand: true` (only valid together with a `start`/`end` range) to have the
+server expand recurring events into their individual occurrences instead of
+returning the master event with its recurrence rule:
+
+```ts
+const occurrences = await client.getEvents(calendarUrl, {
+  start: new Date(),
+  end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  expand: true,
+});
+```
+
+The same `options` (including `expand`) apply to `getTodos`.
 
 ### `createEvent(calendarUrl, eventData)`
 
@@ -282,6 +317,28 @@ recurrenceRule: {
 }
 ```
 
+## Error Handling
+
+Every failure thrown from a public method is a `CalDAVError`. It exposes an
+optional `status` (the HTTP status code, when the failure came from a response)
+and, for wrapped lower-level failures, the original error as `cause`.
+
+```ts
+import { CalDAVClient, CalDAVError } from "ts-caldav";
+
+try {
+  await client.getEvents(calendarUrl);
+} catch (err) {
+  if (err instanceof CalDAVError) {
+    console.error(err.message, err.status); // e.g. "HTTP 404", 404
+    console.error(err.cause); // underlying error, if any
+  }
+}
+```
+
+Request timeouts and network failures are wrapped in `CalDAVError` too, so a
+single `catch` is enough.
+
 ## Auth Notes
 
 - Basic Auth & OAuth2 supported
@@ -316,10 +373,11 @@ if (result.changed) {
 ## Development
 
 ```bash
-git clone https://github.com/yourname/ts-caldav.git
+git clone https://github.com/KlautNet/ts-caldav.git
 cd ts-caldav
-npm install
-npm run build
+pnpm install
+pnpm build
+pnpm test
 ```
 
 ## Contributing
