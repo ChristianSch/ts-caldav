@@ -22,6 +22,24 @@ const cleanEtag = (etag?: string): string | undefined => {
   return etag.replace(/^W\//, "").trim();
 };
 
+/**
+ * Fetches the ctag after a write that has already committed. CTag is optional
+ * sync metadata and is not supported consistently by CalDAV servers, so a
+ * failed follow-up lookup must not turn a successful write into an error.
+ * Returns "" when unavailable; callers needing a guaranteed-fresh value can
+ * call getCtag themselves and handle that error separately.
+ */
+const getCtagAfterWrite = async (
+  calendarUrl: string,
+  getCtag: (calendarUrl: string) => Promise<string>,
+): Promise<string> => {
+  try {
+    return await getCtag(calendarUrl);
+  } catch {
+    return "";
+  }
+};
+
 export const createItem = async <
   T extends { uid?: string; href?: string; etag?: string },
 >(
@@ -45,10 +63,10 @@ export const createItem = async <
       href,
       ics,
       { "If-None-Match": "*" },
-      (s) => s === 201 || s === 204,
+      (s) => s >= 200 && s < 300,
     );
     const etag = response.headers["etag"] || "";
-    const newCtag = await getCtag(calendarUrl);
+    const newCtag = await getCtagAfterWrite(calendarUrl, getCtag);
     return { uid, href: `${base}/${uid}.ics`, etag, newCtag };
   } catch (error) {
     if (error instanceof CalDAVError && error.status === 412) {
@@ -94,7 +112,7 @@ export const updateItem = async <
   try {
     const response = await mkIcsPut(absolutize(item.href), ics, extraHeaders);
     const newEtag = response.headers["etag"] || "";
-    const newCtag = await getCtag(calendarUrl);
+    const newCtag = await getCtagAfterWrite(calendarUrl, getCtag);
     return { uid: item.uid, href: item.href, etag: newEtag, newCtag };
   } catch (error) {
     if (error instanceof CalDAVError && error.status === 412) {
@@ -134,4 +152,3 @@ export const deleteItem = async (
     );
   }
 };
-
