@@ -93,6 +93,8 @@ export class CalDAVClient {
     const url = this.resolveRequestUrl(config.url);
     const headers = { ...this.defaultHeaders, ...config.headers };
 
+    await this.options.validateRequestUrl?.(new URL(url));
+
     if (this.logRequests) {
       console.log(`Request: ${config.method.toUpperCase()} ${url}`);
     }
@@ -105,7 +107,8 @@ export class CalDAVClient {
         method: config.method,
         headers,
         signal: controller.signal,
-        redirect: config.redirect || "follow",
+        redirect:
+          config.redirect || (this.options.followRedirects ? "follow" : "manual"),
       };
 
       // Add body with duplex: 'half' for edge runtime redirect support

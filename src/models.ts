@@ -4,6 +4,16 @@ export interface CalDAVOptions {
   requestTimeout?: number;
   logRequests?: boolean;
   prodId?: string;
+  /**
+   * Called immediately before every outbound request, including requests to
+   * calendar URLs discovered from the server. Throw to block the request.
+   */
+  validateRequestUrl?: (url: URL) => void | Promise<void>;
+  /**
+   * CalDAV servers occasionally redirect to a canonical path. Disabled by
+   * default so callers can validate any redirect destination explicitly.
+   */
+  followRedirects?: boolean;
 }
 
 export type AuthOptions =
