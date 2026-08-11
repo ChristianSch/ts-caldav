@@ -7,46 +7,56 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  unit:
+    name: Unit tests
     runs-on: ubuntu-latest
-
-    services:
-      radicale:
-        image: tomsquest/docker-radicale:latest
-        ports:
-          - 5232:5232
-
-    env:
-      CALDAV_BASE_URL: http://localhost:5232
-      CALDAV_USERNAME: test
-      CALDAV_PASSWORD: test123
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
+          cache: pnpm
 
-      - name: Install dependencies
-        run: npm install
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
 
-      - name: Setup Radicale user and calendar
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    env:
+      CALDAV_BASE_URL: http://localhost:8523/
+      CALDAV_USERNAME: test
+      CALDAV_PASSWORD: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install Radicale
+        run: pip install radicale
+
+      - name: Start Radicale
+        run: radicale --config radicale.conf &
+
+      - name: Wait for Radicale
+        run: until curl -s -o /dev/null http://localhost:8523/; do sleep 0.5; done
+
+      - name: Seed test calendar
         run: |
-          # Wait for Radicale to start
-          sleep 3
-          # Create user (Radicale auto-creates on first auth with default config)
-          # Create a calendar
-          curl -u test:test123 -X MKCALENDAR http://localhost:5232/test/calendar/ || true
+          curl -u test:test -X MKCOL http://localhost:8523/test/ \
+            -H "Content-Type: application/xml" \
+            -d '<?xml version="1.0"?><D:mkcol xmlns:D="DAV:"><D:set><D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:set></D:mkcol>'
+          curl -f -u test:test -X MKCALENDAR http://localhost:8523/test/calendar/ \
+            -H "Content-Type: application/xml" \
+            -d '<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname>Test</D:displayname><C:supported-calendar-component-set><C:comp name="VEVENT"/><C:comp name="VTODO"/></C:supported-calendar-component-set></D:prop></D:set></C:mkcalendar>'
 
-      - name: Run tests
-        run: |
-          npx jest tests/client.test.ts \
-                   tests/recurrence.test.ts \
-                   tests/timezone.test.ts \
-                   tests/alarms.test.ts \
-                   tests/description-encoding.test.ts \
-                   tests/cache.test.ts \
-                   tests/todos.test.ts
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:integration
