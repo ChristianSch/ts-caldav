@@ -1,20 +1,11 @@
 # ts-caldav
 
-[![Run Tests](https://github.com/ChristianSch/ts-caldav/actions/workflows/test.yml/badge.svg)](https://github.com/ChristianSch/ts-caldav/actions/workflows/test.yml)
+[![npm version](https://img.shields.io/npm/v/ts-caldav.svg)](https://www.npmjs.com/package/ts-caldav)
+[![Run Tests](https://github.com/KlautNet/ts-caldav/actions/workflows/test.yml/badge.svg)](https://github.com/KlautNet/ts-caldav/actions/workflows/test.yml)
 
-> A lightweight, promise-based TypeScript CalDAV client for syncing calendar data in browser, Node.js, React Native, or **edge runtime environments** (Cloudflare Workers, Supabase Edge Functions).
+> A lightweight, promise-based TypeScript CalDAV client for syncing calendar data in browser, Node.js, or React Native environments.
 
-**ts-caldav** helps you interact with CalDAV servers — allowing you to fetch calendars, manage events (including recurring events), and synchronize changes with minimal effort. Great for building calendar apps or integrations.
-
-## Edge Runtime Support
-
-This fork uses native `fetch` instead of axios, making it compatible with Cloudflare Workers, Supabase Edge Functions, and other edge runtimes. The `duplex: 'half'` option is used for all requests with a body, allowing proper redirect handling in environments where request bodies cannot be streamed.
-
-**Tested and working as of January 2nd, 2026:**
-- Google Calendar (CalDAV API)
-- Apple iCloud
-- Radicale
-- Any standard CalDAV server
+**ts-caldav** helps you interact with CalDAV servers, allowing you to fetch calendars, manage events (including recurring events), and synchronize changes with minimal effort. Great for building calendar apps or integrations.
 
 ## Table of Contents
 
@@ -25,9 +16,11 @@ This fork uses native `fetch` instead of axios, making it compatible with Cloudf
 - [API Documentation](#api-documentation)
 - [Timezone Support](#timezone-support)
 - [Recurrence Support](#recurrence-support)
+- [Error Handling](#error-handling)
 - [Auth Notes](#auth-notes)
 - [Example: Sync Local Calendar](#example-use-case-sync-local-calendar)
 - [Limitations](#limitations)
+- [Roadmap](#roadmap)
 - [Development](#development)
 - [Contributing](#contributing)
 - [License](#license)
@@ -37,9 +30,11 @@ This fork uses native `fetch` instead of axios, making it compatible with Cloudf
 - Credential validation with CalDAV servers
 - Automatic CalDAV endpoint discovery
 - Fetch calendar homes and individual calendars (with color support)
-- List, create (including recurring), and delete events
-- Detect event changes using `getctag` and `etag`
-- Efficient sync with diff-based event updates
+- List, create (including recurring), update, and delete events and todos (VTODO)
+- Optional server-side expansion of recurring events into individual occurrences
+- Detect changes using `getctag` and `etag`
+- Efficient sync with diff-based updates
+- Unified error handling via a single `CalDAVError` type
 - Built for TypeScript, with full type safety
 
 ## Installation
@@ -51,6 +46,21 @@ pnpm install ts-caldav
 # or
 yarn add ts-caldav
 ```
+
+> **Requirements:** ts-caldav bundles no HTTP-client dependency — it uses the
+> runtime's built-in web APIs (`fetch`, `AbortController`, `URL`, `btoa`). It
+> therefore runs on any runtime that provides them, including:
+>
+> - **Node.js 18+** (where `fetch` became a global)
+> - **modern browsers**
+> - **React Native** (`fetch`/`AbortController` are built in)
+> - **edge runtimes** — Cloudflare Workers, Deno, Bun, Vercel Edge
+>
+> The `engines.node` field (`>=18`) only constrains Node itself and does not
+> restrict browser, React Native, or edge deployments. The optional `undici`
+> fallback for `rejectUnauthorized: false` is Node-only and loaded lazily, so it
+> never affects other runtimes. (Basic auth relies on `btoa`; on older React
+> Native versions without it, add a small `btoa` polyfill or use OAuth.)
 
 ## Quick Start
 
@@ -82,8 +92,11 @@ const events = await client.getEvents(calendars[0].url);
 | **Yahoo**     | `https://caldav.calendar.yahoo.com` |
 | **GMX**       | `https://caldav.gmx.net` |
 | **Fastmail**  | `https://caldav.fastmail.com` |
+| **Nextcloud** | `https://your-host/remote.php/dav` |
+| **Baikal**    | `https://your-host` (or `https://your-host/dav.php`) |
+| **Radicale**  | `https://your-host` |
 
-> 💡 **Note:** Some servers may require enabling CalDAV support or generating app-specific passwords (especially iCloud and Fastmail).
+> **Note:** Some servers may require enabling CalDAV support or generating app-specific passwords, especially iCloud and Fastmail.
 
 ## API Documentation
 
@@ -102,6 +115,26 @@ const client = await CalDAVClient.create({
   logRequests: true,
 });
 ```
+
+#### Options
+
+| Option               | Type                              | Default             | Description                                                                                                      |
+| -------------------- | --------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`            | `string`                          | —                   | Base URL of the CalDAV server. Required.                                                                          |
+| `auth`               | `{ type: "basic", ... }` \| `{ type: "oauth", accessToken }` | — | Credentials. Required.                                                               |
+| `requestTimeout`     | `number` (ms)                     | `5000`              | Aborts a request after this many milliseconds. Set `0` to disable.                                               |
+| `logRequests`        | `boolean`                         | `false`             | Logs each request method, URL, and response status via `console.debug`.                                          |
+| `prodId`             | `string`                          | ts-caldav default   | `PRODID` written into generated iCalendar data.                                                                  |
+| `headers`            | `Record<string, string>`          | `{}`                | Extra headers merged into every request.                                                                         |
+| `rejectUnauthorized` | `boolean`                         | `true`              | Set `false` to allow self-signed / invalid TLS certificates. See the note below.                                |
+
+> **`rejectUnauthorized: false` and native `fetch`:** ts-caldav uses the runtime's
+> built-in `fetch`, which has no per-request TLS toggle. To disable certificate
+> verification in **Node.js**, install [`undici`](https://www.npmjs.com/package/undici)
+> (`npm i undici`) — ts-caldav will use it automatically — or set the
+> `NODE_TLS_REJECT_UNAUTHORIZED=0` environment variable. If neither is available
+> the option can't take effect and a warning is logged rather than failing
+> silently. Only use this against servers you control.
 
 ### `CalDAVClient.createFromCache(options, cache)`
 
@@ -135,6 +168,20 @@ const events = await client.getEvents(calendarUrl, {
 });
 ```
 
+Pass `expand: true` (only valid together with a `start`/`end` range) to have the
+server expand recurring events into their individual occurrences instead of
+returning the master event with its recurrence rule:
+
+```ts
+const occurrences = await client.getEvents(calendarUrl, {
+  start: new Date(),
+  end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  expand: true,
+});
+```
+
+The same `options` (including `expand`) apply to `getTodos`.
+
 ### `createEvent(calendarUrl, eventData)`
 
 Supports full-day, recurring, and timezone-aware events.
@@ -164,7 +211,7 @@ await client.createEvent(calendar.url, {
 If `startTzid`/`endTzid` omitted, event stored in UTC.  
 To use full timezone definitions, include your own `VTIMEZONE` in raw iCal.
 
-> ⚠️ **ETag Notice:** Some CalDAV servers like Yahoo do not return an ETag header when creating events. Because ETag is required to safely update events, calling updateEvent on strict CalDAV servers may fail unless the ETag is manually retrieved via PROPFIND. You can use the getETag() function to manually fetch the ETag
+> **ETag notice:** Some CalDAV servers, such as Yahoo, do not return an ETag header when creating events. Because ETag is required to safely update events, calling `updateEvent` on strict CalDAV servers may fail unless the ETag is retrieved via PROPFIND. Use `getETag()` to fetch it manually.
 
 ### `deleteEvent(calendarUrl, eventUid, etag?)`
 
@@ -200,7 +247,7 @@ await client.updateEvent(calendarUrl, {
 });
 ```
 
-> ℹ️ Automatically strips weak validator prefixes (e.g., `W/"..."`).
+> Automatically strips weak validator prefixes (e.g., `W/"..."`).
 
 ## Todo API
 
@@ -270,6 +317,28 @@ recurrenceRule: {
 }
 ```
 
+## Error Handling
+
+Every failure thrown from a public method is a `CalDAVError`. It exposes an
+optional `status` (the HTTP status code, when the failure came from a response)
+and, for wrapped lower-level failures, the original error as `cause`.
+
+```ts
+import { CalDAVClient, CalDAVError } from "ts-caldav";
+
+try {
+  await client.getEvents(calendarUrl);
+} catch (err) {
+  if (err instanceof CalDAVError) {
+    console.error(err.message, err.status); // e.g. "HTTP 404", 404
+    console.error(err.cause); // underlying error, if any
+  }
+}
+```
+
+Request timeouts and network failures are wrapped in `CalDAVError` too, so a
+single `catch` is enough.
+
 ## Auth Notes
 
 - Basic Auth & OAuth2 supported
@@ -291,56 +360,24 @@ if (result.changed) {
 
 ## Limitations
 
-- No WebDAV sync-token (uses getctag diffing)
-- Limited to VEVENT and VTODO components
+- No WebDAV sync-token support yet; synchronization currently uses `getctag` plus ETag diffing.
+- Component support is currently focused on `VEVENT` and `VTODO`.
 
 ## Roadmap
 
-- Mock requests to prevent flaiky tests
-- VCARD and VJOURNAL support
+- Add deterministic mocked request fixtures for common server response shapes.
+- Add WebDAV sync-token support with `getctag` diffing as a fallback.
+- Expand component support after the `VEVENT` and `VTODO` APIs are stable.
+- Continue hardening provider compatibility for Google, iCloud, Nextcloud, Fastmail, and Radicale.
 
 ## Development
 
-This project uses [Radicale](https://radicale.org/) as a local CalDAV server for testing.
-
 ```bash
-git clone https://github.com/yourname/ts-caldav.git
+git clone https://github.com/KlautNet/ts-caldav.git
 cd ts-caldav
-npm install
-
-# Start Radicale (requires Docker)
-docker-compose up -d
-
-# Create a test calendar
-curl -u test:test123 -X MKCALENDAR http://localhost:5232/test/calendar/
-
-# Copy environment variables
-cp .env.example .env
-
-# Run tests
-npm test
-
-# Build
-npm run build
-```
-
-### Testing with other providers
-
-To test against Google Calendar or iCloud, add credentials to your `.env`:
-
-```bash
-# Google (OAuth token from https://developers.google.com/oauthplayground)
-ACCESS_TOKEN=ya29.xxx
-
-# iCloud (app-specific password from https://appleid.apple.com)
-ICLOUD_USERNAME=your-apple-id@icloud.com
-ICLOUD_PASSWORD=xxxx-xxxx-xxxx-xxxx
-```
-
-Then run:
-```bash
-npm test -- --testPathPattern="google.test"
-npm test -- --testPathPattern="icloud.test"
+pnpm install
+pnpm build
+pnpm test
 ```
 
 ## Contributing

@@ -4,14 +4,16 @@ export interface CalDAVOptions {
   requestTimeout?: number;
   logRequests?: boolean;
   prodId?: string;
+  headers?: Record<string, string>;
+  rejectUnauthorized?: boolean;
   /**
    * Called immediately before every outbound request, including requests to
    * calendar URLs discovered from the server. Throw to block the request.
    */
   validateRequestUrl?: (url: URL) => void | Promise<void>;
   /**
-   * CalDAV servers occasionally redirect to a canonical path. Disabled by
-   * default so callers can validate any redirect destination explicitly.
+   * Whether fetch may automatically follow redirects. Callers that validate
+   * destinations should disable this and handle redirects explicitly.
    */
   followRedirects?: boolean;
 }
@@ -96,6 +98,7 @@ export interface Event {
   startTzid?: string;
   endTzid?: string;
   alarms?: Alarm[];
+  customFields?: Record<string, string | string[]>;
 }
 
 export type TodoRef = EventRef;
@@ -131,10 +134,11 @@ export interface Todo {
   status?: TodoStatus;
   description?: string;
   location?: string;
-  etag: string;
+  etag?: string;
   href: string;
   alarms?: Alarm[];
   sortOrder?: number;
+  customFields?: Record<string, string | string[]>;
 }
 
 export interface CalDAVClientCache {
